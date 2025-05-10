@@ -3,6 +3,7 @@ import torch
 import json
 import os
 from sam2.build_sam import build_sam2
+from transform import morphological_open_close
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 from tqdm import tqdm
 from dataset import SAMDataset
@@ -24,6 +25,8 @@ DEVICE="cuda"
 BS = 12
 SEED = 42 # universe secret
 DATASET = SAMDataset("/root/autodl-tmp/lung-segment/train.csv")
+OPEN_KERNEL_SIZE = 50
+CLOSE_KERNEL_SIZE = 50
 
 def load_model(ckpt='/root/sam2/checkpoints/sam2.1_hiera_small.pt', cfg='configs/sam2.1/sam2.1_hiera_s.yaml'):
     model = build_sam2(cfg, ckpt, device='cuda')
@@ -106,7 +109,7 @@ def save_training_data(folder_path, fold, dices, ious, loss, train:bool):
 
 def calculate_loss(gt_masks, prd_mask, prd_scores):
     # Segmentation Loss calculation
-    seg_loss = (-gt_masks * torch.log(prd_mask + 0.00001) - (1 - gt_masks) * torch.log((1 - prd_mask) + 0.00001)).mean() # cross entropy loss
+    seg_loss = (-gt_masks * torch.log(prd_mask + 1e-6) - (1 - gt_masks) * torch.log((1 - prd_mask) + 1e-6)).mean() # cross entropy loss
 
     # Score loss calculation (intersection over union) IOU
     # print(gt_mask.sum(1).shape, prd_mask.sum(1).sum(1).shape)
@@ -131,14 +134,14 @@ def train(fold, predictor:SAM2ImagePredictor, train_loader, val_loader, optimize
     validation_loss = []
     epoch_validation_dice = []
     epoch_validation_iou = []
-    for _, epoch in enumerate(range(NUM_EPOCHS)):
+    for epoch in tqdm(range(NUM_EPOCHS)):
         ious = []
         dices = []
         # if epoch < 5:
         #     continue
         print(f"epoch {epoch} is running")
         predictor.model.train()
-        for batch in tqdm(train_loader):
+        for batch in train_loader:
             with torch.amp.autocast('cuda'): # cast to mix precision
                 images, masks = batch
                 images, gt_masks = images, masks.cuda()
@@ -150,6 +153,7 @@ def train(fold, predictor:SAM2ImagePredictor, train_loader, val_loader, optimize
 
                 # one-stage
                 low_res_masks, prd_mask, prd_scores = predict_mask(predictor, None, None, None, None)
+                prd_mask = morphological_open_close(prd_mask.unsqueeze(1), OPEN_KERNEL_SIZE, CLOSE_KERNEL_SIZE).squeeze(1)
                 
                 # print(prd_mask.shape)
                 # if epoch >= 5:
@@ -176,12 +180,12 @@ def train(fold, predictor:SAM2ImagePredictor, train_loader, val_loader, optimize
                 # Display results
                 iou = iou.mean().cpu().detach().numpy()
                 dice = dice.mean().cpu().detach().numpy()
-                print(f'train mean iou {np.mean(iou)}; train mean dice {np.mean(dice)}')
+                # print(f'train mean iou {np.mean(iou)}; train mean dice {np.mean(dice)}')
                 ious.append(float(np.mean(iou)))
                 dices.append(float(np.mean(dice)))
 
         scheduler.step()
-        print(f"epoch mean iou: {np.mean(ious)}; epoch mean dice: {np.mean(dices)}")
+        print(f"Epoch {epoch} Training Mean IoU: {np.mean(ious)}; Training Mean Dice: {np.mean(dices)}, lr={optimizer.param_groups[0]['lr']}")
         writer.add_scalar(f'Fold_{fold}/Train Mean IoU', np.mean(ious), epoch)
         writer.add_scalar(f'Fold_{fold}/Train Mean Dice', np.mean(dices), epoch)
         epoch_train_dice.append(float(np.mean(dices)))
@@ -191,7 +195,7 @@ def train(fold, predictor:SAM2ImagePredictor, train_loader, val_loader, optimize
         dices = []
         predictor.model.eval()
         with torch.no_grad():
-            for images, masks in tqdm(val_loader):
+            for images, masks in val_loader:
                 images, gt_masks = images, masks.cuda()
                 images = [
                     images[i].numpy()  # 移除梯度+转移到CPU+转numpy
@@ -201,6 +205,7 @@ def train(fold, predictor:SAM2ImagePredictor, train_loader, val_loader, optimize
 
                 # one-stage
                 low_res_masks, prd_mask, prd_scores = predict_mask(predictor, None, None, None, None)
+                prd_mask = morphological_open_close(prd_mask.unsqueeze(1), OPEN_KERNEL_SIZE, CLOSE_KERNEL_SIZE).squeeze(1)
                 # if epoch >= 5:
                 #     prompts = DATASET.find_entities(prd_mask)
                 #     if prompts != False:
@@ -218,11 +223,11 @@ def train(fold, predictor:SAM2ImagePredictor, train_loader, val_loader, optimize
 
                 iou = iou.mean().cpu().detach().numpy()
                 dice = dice.mean().cpu().detach().numpy()
-                print(f'validation mean iou {np.mean(iou)}; validation mean dice {np.mean(dice)}')
+                # print(f'validation mean iou {np.mean(iou)}; validation mean dice {np.mean(dice)}')
                 ious.append(float(np.mean(iou)))
                 dices.append(float(np.mean(dice)))
 
-        print(f"validation mean iou: {np.mean(ious)}; validation mean dice: {np.mean(dices)}")
+        print(f"Epoch {epoch} Validation Mean IoU: {np.mean(ious)}; Validation Mean Dice: {np.mean(dices)}")
         writer.add_scalar(f'Fold_{fold}/Validation Mean IoU', np.mean(ious), epoch)
         writer.add_scalar(f'Fold_{fold}/Validation Mean Dice', np.mean(dices), epoch)
 
