@@ -18,7 +18,7 @@ class MaskDecoder(nn.Module):
         *,
         transformer_dim: int,
         transformer: nn.Module,
-        num_multimask_outputs: int = 3,
+        num_multimask_outputs: int = 1,
         activation: Type[nn.Module] = nn.GELU,
         iou_head_depth: int = 3,
         iou_head_hidden_dim: int = 256,
@@ -56,6 +56,8 @@ class MaskDecoder(nn.Module):
         self.iou_token = nn.Embedding(1, transformer_dim)
         self.num_mask_tokens = num_multimask_outputs + 1
         self.mask_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
+
+        self.expert_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
 
         self.pred_obj_scores = pred_obj_scores
         if self.pred_obj_scores:
@@ -183,19 +185,21 @@ class MaskDecoder(nn.Module):
                     self.obj_score_token.weight,
                     self.iou_token.weight,
                     self.mask_tokens.weight,
+                    self.expert_tokens.weight
                 ],
                 dim=0,
             )
             s = 1
         else:
             output_tokens = torch.cat(
-                [self.iou_token.weight, self.mask_tokens.weight], dim=0
+                [self.iou_token.weight, self.mask_tokens.weight, self.expert_tokens.weight], dim=0
             )
         output_tokens = output_tokens.unsqueeze(0).expand(
-            sparse_prompt_embeddings.size(0), -1, -1
+            image_embeddings.size(0), -1, -1
         )
-        tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
-
+        #tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
+        tokens = output_tokens
+        #print(tokens.shape)
         # Expand per-image data in batch direction to be per-mask
         if repeat_image:
             src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
@@ -213,6 +217,8 @@ class MaskDecoder(nn.Module):
         hs, src = self.transformer(src, pos_src, tokens)
         iou_token_out = hs[:, s, :]
         mask_tokens_out = hs[:, s + 1 : (s + 1 + self.num_mask_tokens), :]
+        # Medical expert tokens with the same size with the mask tokens
+        expert_tokens_out = hs[:, (s + 1 + self.num_mask_tokens):, :]
 
         # Upscale mask embeddings and predict masks using the mask tokens
         src = src.transpose(1, 2).view(b, c, h, w)

@@ -158,7 +158,9 @@ class TwoWayAttentionBlock(nn.Module):
     ) -> Tuple[Tensor, Tensor]:
         # Self attention block
         if self.skip_first_layer_pe:
-            queries = self.self_attn(q=queries, k=queries, v=queries)
+            q = queries 
+            attn_out = self.self_attn(q=q, k=q, v=queries)
+            queries = queries + attn_out
         else:
             q = queries + query_pe
             attn_out = self.self_attn(q=q, k=q, v=queries)
@@ -189,7 +191,7 @@ class TwoWayAttentionBlock(nn.Module):
 
 class Attention(nn.Module):
     """
-    An attention layer that allows for downscaling the size of the embedding
+    An attention layer that allows for downscaling the size of the embedding (for reducing computation)
     after projection to queries, keys, and values.
     """
 

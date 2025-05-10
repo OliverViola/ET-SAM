@@ -129,7 +129,7 @@ class PromptEncoder(nn.Module):
         )
         corner_embedding[:, 0, :] += self.point_embeddings[2].weight
         corner_embedding[:, 1, :] += self.point_embeddings[3].weight
-        return corner_embedding
+        return corner_embedding.view(boxes.size(0), -1, self.embed_dim)
 
     def _embed_masks(self, masks: torch.Tensor) -> torch.Tensor:
         """Embeds mask inputs."""
@@ -190,6 +190,7 @@ class PromptEncoder(nn.Module):
             sparse_embeddings = torch.cat([sparse_embeddings, point_embeddings], dim=1)
         if boxes is not None:
             box_embeddings = self._embed_boxes(boxes)
+            #print(boxes.shape, box_embeddings.shape, sparse_embeddings.shape)
             sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=1)
 
         if masks is not None:

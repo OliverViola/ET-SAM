@@ -164,7 +164,13 @@ def build_sam2_video_predictor_hf(model_id, **kwargs):
 def _load_checkpoint(model, ckpt_path):
     if ckpt_path is not None:
         sd = torch.load(ckpt_path, map_location="cpu", weights_only=True)["model"]
-        missing_keys, unexpected_keys = model.load_state_dict(sd)
+        model_dict = model.state_dict()
+        pretrained_dict = {k:v for k, v in sd.items() if k in model_dict}
+        model_dict.update(pretrained_dict)
+        missing_keys, unexpected_keys = model.load_state_dict(model_dict, strict=False)
+        for name, param in model.named_parameters():
+            if name not in sd:
+                print(name, param)
         if missing_keys:
             logging.error(missing_keys)
             raise RuntimeError()
