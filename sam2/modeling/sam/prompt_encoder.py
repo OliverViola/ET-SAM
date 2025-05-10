@@ -133,7 +133,7 @@ class PromptEncoder(nn.Module):
 
     def _embed_masks(self, masks: torch.Tensor) -> torch.Tensor:
         """Embeds mask inputs."""
-        mask_embedding = self.mask_downscaling(masks)
+        mask_embedding = self.mask_downscaling(masks) # B * C * 256 * 256 -> B * 256 * 64 * 64
         return mask_embedding
 
     def _get_batch_size(

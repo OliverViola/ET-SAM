@@ -98,7 +98,7 @@ class SAMDataset(Dataset):
         return left_lung.astype(np.uint8), right_lung.astype(np.uint8)
     
     def generate_paired_boxes(self, left_mask, right_mask):
-        
+        expand_pixels = 75
         # 左肺包围盒
         left_contour = cv2.findContours(left_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]
         x1, y1, w1, h1 = cv2.boundingRect(left_contour[0])
@@ -107,8 +107,8 @@ class SAMDataset(Dataset):
         right_contour = cv2.findContours(right_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]
         x2, y2, w2, h2 = cv2.boundingRect(right_contour[0])
         
-        return np.array([[x1, y1, x1+w1, y1+h1],
-                        [x2, y2, x2+w2, y2+h2]])
+        return np.array([[x1-expand_pixels, y1-expand_pixels, x1+w1 + expand_pixels, y1+h1 + expand_pixels],
+                        [x2-expand_pixels, y2-expand_pixels, x2+w2+expand_pixels, y2+h2+expand_pixels]])
     
     def paired_centroids(self, left_mask, right_mask):
         
@@ -145,15 +145,14 @@ class SAMDataset(Dataset):
         # 获取基础点
         centroids = self.paired_centroids(left, right)
         boxes = self.generate_paired_boxes(left, right)
-        bg_points, bg_labels = self.generate_background_points(boxes)
+        # bg_points, bg_labels = self.generate_background_points(boxes)
         
         # 合并所有点
-        all_points = np.vstack([centroids, bg_points])
+        all_points = np.vstack([centroids])
         
         # 创建标签（0:背景，1:前景）
         labels = np.concatenate([
             np.ones(len(centroids)),          # 质心为前景      
-            bg_labels          # 背景点
         ])
         
         return all_points.astype(int), labels, boxes

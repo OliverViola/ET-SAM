@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.transforms import Normalize, Resize, ToTensor
+import cv2
 
 
 class SAM2Transforms(nn.Module):
@@ -115,4 +116,5 @@ class SAM2Transforms(nn.Module):
             masks = input_masks
 
         masks = F.interpolate(masks, orig_hw, mode="bilinear", align_corners=False)
+        
         return masks
