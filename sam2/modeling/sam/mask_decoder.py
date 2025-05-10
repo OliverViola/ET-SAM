@@ -57,7 +57,7 @@ class MaskDecoder(nn.Module):
         self.num_mask_tokens = num_multimask_outputs + 1
         self.mask_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
 
-        self.expert_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
+        #self.expert_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
 
         self.pred_obj_scores = pred_obj_scores
         if self.pred_obj_scores:
@@ -185,14 +185,13 @@ class MaskDecoder(nn.Module):
                     self.obj_score_token.weight,
                     self.iou_token.weight,
                     self.mask_tokens.weight,
-                    self.expert_tokens.weight
                 ],
                 dim=0,
             )
             s = 1
         else:
             output_tokens = torch.cat(
-                [self.iou_token.weight, self.mask_tokens.weight, self.expert_tokens.weight], dim=0
+                [self.iou_token.weight, self.mask_tokens.weight], dim=0
             )
         output_tokens = output_tokens.unsqueeze(0).expand(
             image_embeddings.size(0), -1, -1

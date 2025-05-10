@@ -17,7 +17,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, CosineAnnealingWarmResta
 # hydra.initialize_config_module('./sam2_configs', version_base='1.2')
 
 # Hyper Parameters
-NUM_EPOCHS = 120
+NUM_EPOCHS = 210
 LR = 5e-4
 WD = 5e-5
 DEVICE="cuda"
@@ -32,7 +32,7 @@ def load_model(ckpt='/root/sam2/checkpoints/sam2.1_hiera_small.pt', cfg='configs
     pretrained_model = torch.load(ckpt, map_location="cpu", weights_only=True)['model']
     old_param_names = pretrained_model.keys()
     for name, param in model.named_parameters():
-        if name in old_param_names and 'mask_tokens' not in name and 'iou_token' not in name and 'point_embeddings' not in name:
+        if name in old_param_names and 'mask_tokens' not in name and 'iou_token' not in name  and 'not_a_point_embed' not in name: # 'point_embeddings' not in name
             param.requires_grad=False
         else:
             param.requires_grad=True
@@ -59,8 +59,8 @@ def k_fold_train(k):
         scaler = torch.amp.GradScaler('cuda') # mixed precision
         scheduler = CosineAnnealingWarmRestarts(
             optimizer,
-            T_0=20,           # 初始周期长度（例如50个epoch）
-            T_mult=1,         # 周期长度倍增因子（每个周期后T=T*T_mult）
+            T_0=30,           # 初始周期长度（例如50个epoch）
+            T_mult=2,         # 周期长度倍增因子（每个周期后T=T*T_mult）
             eta_min=1e-6
         )
         train(fold, predictor, train_loader, val_loader, optimizer, scaler, scheduler, writer)
@@ -152,14 +152,14 @@ def train(fold, predictor:SAM2ImagePredictor, train_loader, val_loader, optimize
                 low_res_masks, prd_mask, prd_scores = predict_mask(predictor, None, None, None, None)
                 
                 # print(prd_mask.shape)
-                if epoch >= 5:
-                    prompts = DATASET.find_entities(prd_mask)
-                    if prompts != False:
-                        print('succeefully generate prompts based on first stage mask')
-                        points, labels, boxes = prompts
-                        points, labels, boxes = points.cuda(), labels.cuda(), boxes.cuda()
-                        # two-stage
-                        low_res_masks, prd_mask, prd_scores = predict_mask(predictor, points, labels, boxes, low_res_masks)
+                # if epoch >= 5:
+                #     prompts = DATASET.find_entities(prd_mask)
+                #     if prompts != False:
+                #         print('succeefully generate prompts based on first stage mask')
+                #         points, labels, boxes = prompts
+                #         points, labels, boxes = points.cuda(), labels.cuda(), boxes.cuda()
+                #         # two-stage
+                #         low_res_masks, prd_mask, prd_scores = predict_mask(predictor, points, labels, boxes, low_res_masks)
 
                 loss, iou, dice = calculate_loss(gt_masks, prd_mask, prd_scores)
                 
@@ -201,14 +201,14 @@ def train(fold, predictor:SAM2ImagePredictor, train_loader, val_loader, optimize
 
                 # one-stage
                 low_res_masks, prd_mask, prd_scores = predict_mask(predictor, None, None, None, None)
-                if epoch >= 5:
-                    prompts = DATASET.find_entities(prd_mask)
-                    if prompts != False:
-                        print('succeefully generate prompts based on first stage mask')
-                        points, labels, boxes = prompts
-                        points, labels, boxes = points.cuda(), labels.cuda(), boxes.cuda()
-                        # two-stage
-                        low_res_masks, prd_mask, prd_scores = predict_mask(predictor, points, labels, boxes, low_res_masks)
+                # if epoch >= 5:
+                #     prompts = DATASET.find_entities(prd_mask)
+                #     if prompts != False:
+                #         print('succeefully generate prompts based on first stage mask')
+                #         points, labels, boxes = prompts
+                #         points, labels, boxes = points.cuda(), labels.cuda(), boxes.cuda()
+                #         # two-stage
+                #         low_res_masks, prd_mask, prd_scores = predict_mask(predictor, points, labels, boxes, low_res_masks)
 
                 loss, iou, dice = calculate_loss(gt_masks, prd_mask, prd_scores)
 
@@ -240,8 +240,8 @@ def train(fold, predictor:SAM2ImagePredictor, train_loader, val_loader, optimize
         
         max_iou = max(max_iou, np.mean(ious))
     
-    save_training_data('/root/sam2/CXR/data_with_pe', fold, epoch_train_dice, epoch_train_iou, train_loss, True)
-    save_training_data('/root/sam2/CXR/data_with_pe', fold, epoch_validation_dice, epoch_validation_iou, validation_loss, False)
+    save_training_data('/root/sam2/CXR/one_stage_only', fold, epoch_train_dice, epoch_train_iou, train_loss, True)
+    save_training_data('/root/sam2/CXR/one_stage_only', fold, epoch_validation_dice, epoch_validation_iou, validation_loss, False)
     print(f"FOLD {fold} finished! Max Validation dice is {max_dice}, max Validation IoU is {max_iou}")
 
 k_fold_train(5)
