@@ -41,8 +41,8 @@ def morphological_open(input_tensor, kernel_size=30):
                           padding=kernel_size//2)
     
     # 膨胀操作
-    dilated = F.max_pool2d(eroded, kernel_size=kernel.shape[-1], stride=1, 
-                          padding=kernel_size//2)
+    dilated = F.max_pool2d(eroded, kernel_size=kernel.shape[-1] // 2, stride=1, 
+                          padding=kernel_size//4)
     
     
     return dilated[ : , : , : input_tensor.shape[2], : input_tensor.shape[3]]
