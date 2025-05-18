@@ -1,7 +1,10 @@
+import os
+import json
 import torch
 import numpy as np
 from sklearn.cluster import KMeans
 from typing import List, Tuple, Optional
+from sam2.sam2_image_predictor import SAM2ImagePredictor
 
 def compute_cosine_distance(z1: torch.Tensor, z2: torch.Tensor) -> float:
     """
@@ -121,5 +124,41 @@ def select_few_shot_samples(features: List[torch.Tensor], k: int) -> Tuple[List[
         query_groups[cluster_idx] = query_samples
     
     return support_samples, query_groups
+
+def predict_mask(predictor:SAM2ImagePredictor, points, labels, boxes, mask):
+    # prompt encoding
+    if points is not None:
+        sparse_embeddings, dense_embeddings = predictor.model.sam_prompt_encoder(points=(points, labels), boxes=boxes,masks=mask)
+    else:
+        sparse_embeddings, dense_embeddings = predictor.model.sam_prompt_encoder(points=None, boxes=boxes,masks=mask)
+
+    #print(predictor._features["image_embed"].shape)
+    # mask decoder
+    high_res_features = [feat_level[-1].unsqueeze(0) for feat_level in predictor._features["high_res_feats"]]
+    low_res_masks, prd_scores, _, _ = predictor.model.sam_mask_decoder(image_embeddings=predictor._features["image_embed"],image_pe=predictor.model.sam_prompt_encoder.get_dense_pe(),sparse_prompt_embeddings=sparse_embeddings,dense_prompt_embeddings=dense_embeddings,multimask_output=False,repeat_image=False,high_res_features=high_res_features,)
+    prd_masks = predictor._transforms.postprocess_masks(low_res_masks, predictor._orig_hw[-1])# Upscale the masks to the original image resolution
+    # print(low_res_masks.min(), low_res_masks.max(), torch.median(low_res_masks), low_res_masks.shape)
+    prd_mask = torch.sigmoid(prd_masks[:, 0]) # Turn logit map to probability map
+    return low_res_masks, prd_mask, prd_scores
+
+def save_training_data(folder_path, fold, dices, ious, loss, train:bool):
+    base = os.path.join(folder_path, f'fold_{fold}')
+    if not os.path.exists(os.path.join(base)):
+        os.makedirs(os.path.join(folder_path, f'fold_{fold}'))
+    
+    if train:
+        method = 'train'
+    else:
+        method = 'validation'
+
+    with open(os.path.join(base, f'{method}_loss.json'), 'w') as f:
+        json.dump(loss, f)
+
+    with open(os.path.join(base, f'{method}_iou.json'), 'w') as f:
+        json.dump(ious, f)
+    
+    with open(os.path.join(base, f'{method}_dice.json'), 'w') as f:
+        json.dump(dices, f)
+
 
 
