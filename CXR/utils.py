@@ -59,7 +59,7 @@ def k_center_greedy(features: List[torch.Tensor], k: int, first_center_idx: Opti
         first_center_idx = find_most_similar_sample(features)
     
     centers = [first_center_idx]
-    distances = torch.zeros(n_samples)
+    distances = torch.zeros(n_samples).cuda()
     
     # Convert features to tensor for faster computation
     features_tensor = torch.stack([f.flatten() for f in features])

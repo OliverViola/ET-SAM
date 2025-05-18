@@ -4,7 +4,7 @@ import json
 import os
 from loss import MixedEdgeWeightedLoss
 from sam2.build_sam import build_sam2
-from CXR.utils import select_few_shot_samples
+from utils import select_few_shot_samples
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 from tqdm import tqdm
 from dataset import SAMDataset
@@ -12,11 +12,6 @@ from torch.utils.data import Dataset, DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 import random
-# import hydra
-
-# # init hydra
-# hydra.core.global_hydra.GlobalHydra.instance().clear()
-# hydra.initialize_config_module('./sam2_configs', version_base='1.2')
 
 # Hyper Parameters
 NUM_EPOCHS = 210
@@ -58,12 +53,13 @@ def extract_features(predictor, dataset):
         for idx in tqdm(range(len(dataset)), desc="Extracting features"):
             image, _ = dataset[idx]
             # Convert to numpy and create batch of 1
-            image_np = image.numpy()
+            image_np = image
             # Set image and get features
             predictor.set_image(image_np)
             # Get image embedding from predictor's features
             feature = predictor._features["image_embed"]
             features.append(feature)
+            # print(features[0].device)
     return features
 
 def few_shot_train():
@@ -241,8 +237,8 @@ def train_model(predictor:SAM2ImagePredictor, train_loader, val_loader, optimize
         
         max_iou = max(max_iou, np.mean(ious))
     
-    save_training_data('/root/sam2/CXR/few_shot', 0, epoch_train_dice, epoch_train_iou, train_loss, True)
-    save_training_data('/root/sam2/CXR/few_shot', 0, epoch_validation_dice, epoch_validation_iou, validation_loss, False)
+    save_training_data('/root/sam2/CXR/few_shot_k_center', 0, epoch_train_dice, epoch_train_iou, train_loss, True)
+    save_training_data('/root/sam2/CXR/few_shot_k_center', 0, epoch_validation_dice, epoch_validation_iou, validation_loss, False)
     print(f"Few-shot training finished! Max Validation dice is {max_dice}, max Validation IoU is {max_iou}")
 
 def predict_mask(predictor:SAM2ImagePredictor, points, labels, boxes, mask):
